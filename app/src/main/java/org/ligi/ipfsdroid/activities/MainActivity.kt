@@ -9,6 +9,7 @@ import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import io.ipfs.kotlin.IPFS
 import io.ipfs.kotlin.model.VersionInfo
 import kotlinx.android.synthetic.main.activity_main.*
@@ -18,7 +19,6 @@ import org.ligi.tracedroid.sending.TraceDroidEmailSender
 import javax.inject.Inject
 import com.universalvideoview.UniversalMediaController
 import com.universalvideoview.UniversalVideoView
-import kotlinx.android.synthetic.main.activity_details.*
 
 class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
 
@@ -27,16 +27,15 @@ class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
     @Inject
     lateinit var ipfs: IPFS
 
-    //private val VIDEO_URL = "http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4"
-    //private val VIDEO_URL = "http://127.0.0.1:8080/ipfs/Qmey5Cn2jxNRGxmhHVeDSBDj3PZfXFfW3QhF5hqZVQk3si"
-    //private val VIDEO_URL = "http://172.17.140.83:8080/ipfs/Qmey5Cn2jxNRGxmhHVeDSBDj3PZfXFfW3QhF5hqZVQk3si"
-    internal var mVideoView: UniversalVideoView? = null
-    internal var mMediaController: UniversalMediaController? = null
-    internal var mVideoLayout: View? = null
-    internal var mBottomLayout: View? = null
-    private var cachedHeight: Int? = 0
+    lateinit var mVideoView: UniversalVideoView
+    lateinit var mMediaController: UniversalMediaController
+    lateinit var mVideoLayout: View
+    lateinit var mBottomLayout: View
+    private var cachedHeight: Int = 0
     private var isFullscreen: Boolean = false
-    private val TAG = "DetailsActivity"
+    private val TAG = "MainActivity"
+    private val SEEK_POSITION_KEY = "SEEK_POSITION_KEY"
+    private var mSeekPosition: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,22 +48,27 @@ class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
         mBottomLayout = findViewById(R.id.bottom_layout)
         mVideoView = findViewById(R.id.videoView) as UniversalVideoView
         mMediaController = findViewById(R.id.media_controller) as UniversalMediaController
-        mVideoView?.setMediaController(mMediaController)
+        mVideoView.setMediaController(mMediaController)
         setVideoAreaSize()
-        mVideoView?.setVideoViewCallback(this)
+        mVideoView.setVideoViewCallback(this)
 
         playVideo.setOnClickListener({
             val inputVideo: String = textVideoHashOrUrl.text.toString()
             var inputLen: Int = inputVideo.length;
-            if (inputLen == 46) {
-                mVideoView?.setVideoPath("http://127.0.0.1:8080/ipfs/" + inputVideo)
-            } else if (inputLen > 20) {
-                mVideoView?.setVideoPath(inputVideo)
-            } else {
-                mVideoView?.setVideoPath("http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4")
+
+            if (mSeekPosition > 0) {
+                mVideoView.seekTo(mSeekPosition)
             }
-            mVideoView?.start()
-            mMediaController?.setTitle("IPFS Video Demon")
+
+            if (inputLen == 46) {
+                mVideoView.setVideoPath("http://127.0.0.1:8080/ipfs/" + inputVideo)
+            } else if (inputLen > 20) {
+                mVideoView.setVideoPath(inputVideo)
+            } else {
+                mVideoView.setVideoPath("http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4")
+            }
+            mVideoView.start()
+            mMediaController.setTitle("IPFS Video Demon")
         })
 
         downloadIPFSButton.setOnClickListener({
@@ -109,14 +113,19 @@ class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
             refresh()
         })
 
-        TraceDroidEmailSender.sendStackTraces("ligi@ligi.de", this)
+        mVideoView.setOnCompletionListener(MediaPlayer.OnCompletionListener { Log.d(TAG, "onCompletion ") })
+
+        TraceDroidEmailSender.sendStackTraces("gjz22cn@hotmail.com", this)
 
         refresh()
     }
 
     override fun onResume() {
         super.onResume()
-        refresh()
+        Log.d(TAG, "onResume")
+        if (!isFullscreen) {
+            refresh()
+        }
     }
 
     private fun refresh() {
@@ -125,38 +134,61 @@ class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
         downloadIPFSButton.visibility = if (ipfsDaemon.isReady()) View.GONE else View.VISIBLE
     }
 
+    override fun onPause() {
+        super.onPause()
+        Log.d(TAG, "onPause ")
+        if (mVideoView.isPlaying()) {
+            mSeekPosition = mVideoView.getCurrentPosition()
+            Log.d(TAG, "onPause mSeekPosition=" + mSeekPosition)
+            mVideoView.pause()
+        }
+    }
+
     /**
      * 置视频区域大小
      */
     private fun setVideoAreaSize() {
-        mVideoLayout?.post(Runnable {
-            val width = mVideoLayout?.getWidth()
-            cachedHeight = width?.times(405f)?.div(720f)?.toInt()
+        mVideoLayout.post(Runnable {
+            val width = mVideoLayout.getWidth()
+            cachedHeight = width.times(405f).div(720f).toInt()
             //cachedHeight = (int) (width * 3f / 4f);
             //cachedHeight = (int) (width * 9f / 16f);
-            val videoLayoutParams = mVideoLayout?.getLayoutParams()
-            videoLayoutParams?.width = ViewGroup.LayoutParams.MATCH_PARENT
-            videoLayoutParams?.height = cachedHeight
-            mVideoLayout?.setLayoutParams(videoLayoutParams)
+            val videoLayoutParams = mVideoLayout.getLayoutParams()
+            videoLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            videoLayoutParams.height = cachedHeight
+            mVideoLayout.setLayoutParams(videoLayoutParams)
             //mVideoView?.setVideoPath(VIDEO_URL)
-            mVideoView?.requestFocus()
+            mVideoView.requestFocus()
         })
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        Log.d(TAG, "onSaveInstanceState Position=" + mVideoView.getCurrentPosition())
+        outState.putInt(SEEK_POSITION_KEY, mSeekPosition)
+    }
+
+    override fun onRestoreInstanceState(outState: Bundle) {
+        super.onRestoreInstanceState(outState)
+        mSeekPosition = outState.getInt(SEEK_POSITION_KEY)
+        Log.d(TAG, "onRestoreInstanceState Position=" + mSeekPosition)
     }
 
     override fun onScaleChange(isFullscreen: Boolean) {
         this.isFullscreen = isFullscreen
         if (isFullscreen) {
-            val layoutParams = mVideoLayout?.getLayoutParams()
-            layoutParams?.width = ViewGroup.LayoutParams.MATCH_PARENT
-            layoutParams?.height = ViewGroup.LayoutParams.MATCH_PARENT
-            mVideoLayout?.setLayoutParams(layoutParams)
-            mBottomLayout?.setVisibility(View.GONE)
+            val layoutParams = mVideoLayout.getLayoutParams()
+            layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+            mVideoLayout.setLayoutParams(layoutParams)
+            //this.requestWindowFeature(Window.FEATURE_NO_TITLE);
+            mBottomLayout.setVisibility(View.GONE)
         } else {
-            val layoutParams = mVideoLayout?.getLayoutParams()
-            layoutParams?.width = ViewGroup.LayoutParams.MATCH_PARENT
-            layoutParams?.height = this.cachedHeight
-            mVideoLayout?.setLayoutParams(layoutParams)
-            mBottomLayout?.setVisibility(View.VISIBLE)
+            val layoutParams = mVideoLayout.getLayoutParams()
+            layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            layoutParams.height = this.cachedHeight
+            mVideoLayout.setLayoutParams(layoutParams)
+            mBottomLayout.setVisibility(View.VISIBLE)
         }
 
         switchTitleBar(!isFullscreen)
@@ -164,10 +196,13 @@ class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
 
     private fun switchTitleBar(show: Boolean) {
         val supportActionBar = supportActionBar
+        Log.e(TAG, "switchTitleBar()")
         if (supportActionBar != null) {
             if (show) {
+                Log.e(TAG, "supportActionBar.show()")
                 supportActionBar.show()
             } else {
+                Log.e(TAG, "supportActionBar.hide()")
                 supportActionBar.hide()
             }
         }
@@ -187,5 +222,13 @@ class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
 
     override fun onBufferingEnd(mediaPlayer: MediaPlayer) {
         Log.d(TAG, "onBufferingEnd UniversalVideoView callback")
+    }
+
+    override fun onBackPressed() {
+        if (this.isFullscreen) {
+            mVideoView.setFullscreen(false)
+        } else {
+            super.onBackPressed()
+        }
     }
 }
