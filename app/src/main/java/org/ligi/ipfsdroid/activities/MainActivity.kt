@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import io.ipfs.kotlin.IPFS
+import io.ipfs.kotlin.IPFSConnection
 import io.ipfs.kotlin.model.VersionInfo
 import kotlinx.android.synthetic.main.activity_main.*
 import org.ligi.ipfsdroid.*
@@ -36,6 +37,8 @@ class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
     private val TAG = "MainActivity"
     private val SEEK_POSITION_KEY = "SEEK_POSITION_KEY"
     private var mSeekPosition: Int = 0
+    private var bootstrapAddress: String = "/ip4/172.17.140.83/tcp/4001/ipfs/QmeZCurirTSSaeLQTukuVVEjiijNz7jjReniLxFvKKGeeU"
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,12 +65,13 @@ class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
 
             if (inputLen == 46) {
                 mVideoView.setVideoPath("http://127.0.0.1:8080/ipfs/" + inputVideo)
+                mVideoView.start()
             } else if (inputLen > 20) {
                 mVideoView.setVideoPath(inputVideo)
+                mVideoView.start()
             } else {
                 mVideoView.setVideoPath("http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4")
             }
-            mVideoView.start()
             mMediaController.setTitle("IPFS Video Demon")
         })
 
@@ -96,6 +100,8 @@ class MainActivity : AppCompatActivity() , UniversalVideoView.VideoViewCallback{
                     } catch (ignored: Exception) {
                     }
                 }
+
+                ipfsDaemon.prepareBootstrap(bootstrapAddress)
 
                 runOnUiThread {
                     progressDialog.dismiss()
